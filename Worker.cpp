@@ -9,10 +9,29 @@
 #include "Worker.h"
 
 void Worker::run(int listener) {
+    int threads_num = 3;
+    std::vector<std::thread> threads;
+    for (int i = 0; i < threads_num; i++) {
+        std::thread thread([this](int l) {
+            this->run_thread(l);
+        }, listener);
+        threads.push_back(std::move(thread));
+    }
+
+    for (auto &thr: threads) {
+        if (thr.joinable()) {
+            thr.join();
+        }
+    }
+}
+
+void Worker::run_thread(int listener) {
     HttpParser parser;
 
     while(true) {
+//        _mut.lock();
         auto sock = accept(listener, nullptr, nullptr);
+//        _mut.unlock();
         if(sock < 0) {
             perror("accept");
             exit(3);
