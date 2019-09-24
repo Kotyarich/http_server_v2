@@ -14,7 +14,7 @@ namespace fs = std::experimental::filesystem;
 
 class Worker {
 public:
-    Worker(std::string &docs_root);
+    explicit Worker(std::string &docs_root);
     void run(int listener);
 private:
     std::string _docs_root;

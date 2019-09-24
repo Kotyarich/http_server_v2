@@ -154,10 +154,12 @@ void Worker::write_file(int sock, std::string &uri) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
                 // TODO add something useful here mb
             }
-            auto s = errno;
+            close(fd);
             return;
         }
     }
+
+    close(fd);
 }
 
 Worker::Worker(std::string &docs_root): _docs_root(docs_root) {}

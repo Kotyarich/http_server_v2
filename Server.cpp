@@ -22,7 +22,7 @@ void Server::start() {
         exit(2);
     }
 
-    listen(listener, 1);
+    listen(listener, 30);
     int pid = 0;
     for (int i = 0; i < _workers_number; i++) {
         pid = fork();
@@ -52,7 +52,7 @@ void Server::read_config(std::string path) {
     char buf[100];
     f >> tmp_s >> tmp_i;
     f.getline(buf, 100);
-    _workers_number = tmp_i * 2;
+    _workers_number = tmp_i;
 
     f >> tmp_s >> tmp_i;
     f.getline(buf, 100);
