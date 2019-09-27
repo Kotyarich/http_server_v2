@@ -16,4 +16,4 @@ RUN mkdir build &&\
     make
 
 EXPOSE 80
-CMD ["/opt/kotya_server/build/server", "-p", "80", "-c", "/opt/kotya_server/httpconf.conf"]
+CMD ["/opt/kotya_server/build/server", "-p", "80", "-c", "/etc/httpd.conf"]

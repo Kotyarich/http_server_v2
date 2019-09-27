@@ -65,7 +65,7 @@ std::string Worker::read_request(int sock) {
         req.append(buf, n);
     } else {
         if (n == -1) {
-            throw Exception("read failed"); // TODO add custom exception
+            throw Exception("read failed");
         }
     }
 
@@ -75,6 +75,9 @@ std::string Worker::read_request(int sock) {
 void Worker::complete_tusk(HttpRequest &request, int socket) {
     int status;
     auto method = request.start_line.method;
+    std::cout << "url: " << request.start_line.uri << std::endl
+        << "method: " << request.start_line.method << std::endl
+        << "http version: " << request.start_line.http_version << std::endl;
 
     if (method == "GET" || method == "HEAD") {
         status = 200;
@@ -102,6 +105,7 @@ void Worker::complete_tusk(HttpRequest &request, int socket) {
             size = fs::file_size(request.start_line.uri);
         }
 
+        std::cout << "status: " << status << "; size: " << size << std::endl;
         if (status == 200) {
             write_headers(socket, true, request.start_line.uri, size);
             if (method == "GET") {
@@ -134,6 +138,7 @@ void Worker::write_headers(int sock, bool is_ok, std::string &uri, int length) {
             + "Content-Length: " + std::to_string(length) + "\r\n\r\n";
     }
 
+    std::cout << headers;
     send(sock, headers.c_str(), headers.length(), 0);
 }
 
@@ -156,6 +161,7 @@ bool Worker::make_path(std::string &path) {
         subdir = true;
         path = _docs_root + decoded_path + "index.html";
     }
+    std::cout << "path: " << path << std::endl;
 
     return subdir;
 }

@@ -1,6 +1,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <algorithm>
+#include <iostream>
 #include "HttpParser.h"
 
 HttpRequest HttpParser::parse_header(std::string &req) {
@@ -8,6 +9,7 @@ HttpRequest HttpParser::parse_header(std::string &req) {
 
     std::string line;
     std::getline(request, line);
+    std::cout << line << std::endl;
 
     auto header_end = line.find(' ');
     auto uri_end = line.find(' ', header_end + 1);
