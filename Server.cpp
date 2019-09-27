@@ -47,16 +47,22 @@ void Server::read_config(std::string path) {
         throw std::exception();
     }
 
-    std::string tmp_s;
-    int tmp_i;
-    char buf[100];
-    f >> tmp_s >> tmp_i;
-    f.getline(buf, 100);
-    _workers_number = tmp_i;
+    std::string line;
+    std::cout << "Config:" << std::endl;
+    while(std::getline(f, line)) {
+        std::cout << line << std::endl;
 
-    f >> tmp_s >> tmp_i;
-    f.getline(buf, 100);
+        std::istringstream line_stream{line};
+        std::string arg_name, arg_val;
+        line_stream >> arg_name >> arg_val;
 
-    f >> tmp_s;
-    f >> _documents_root;
+        std::cout << arg_val << std::endl;
+        if (arg_name == "document_root") {
+            _documents_root = arg_val;
+        } else if (arg_name == "cpu_limit") {
+            _workers_number = std::atoi(arg_val.c_str());
+        }
+    }
+
+    f.close();
 }
