@@ -5,10 +5,12 @@
 #include <fstream>
 #include <iostream>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/sendfile.h>
 #include "Worker.h"
 
 void Worker::run(int listener) {
+    signal(SIGPIPE, SIG_IGN);
     int threads_num = 3;
     std::vector<std::thread> threads;
     for (int i = 0; i < threads_num; i++) {
@@ -29,18 +31,16 @@ void Worker::run_thread(int listener) {
     HttpParser parser;
 
     while(true) {
-//        _mut.lock();
         auto sock = accept(listener, nullptr, nullptr);
-//        _mut.unlock();
         if(sock < 0) {
             perror("accept");
             exit(3);
         }
 
         auto req = read_request(sock);
-        auto http_req = parser.parse_header(req);
 
         try {
+            auto http_req = parser.parse_header(req);
             complete_tusk(http_req, sock);
         } catch (std::exception &e) {
             std::cout << e.what() << std::endl;

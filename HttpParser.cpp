@@ -20,6 +20,10 @@ HttpRequest HttpParser::parse_header(std::string &req) {
         line.substr(uri_end + 1, line.length() - uri_end - 2)
     };
 
+    if (http_header.http_version != "HTTP/1.0" and http_header.http_version != "HTTP/1.1") {
+        throw std::exception();
+    }
+
     Headers headers;
     while (std::getline(request, line) && line != "\r") {
         auto name_end = line.find(':');
