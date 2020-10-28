@@ -7,184 +7,113 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/sendfile.h>
+#include <sys/epoll.h>
 #include "Worker.h"
 
-void Worker::run(int listener) {
-    signal(SIGPIPE, SIG_IGN);
-    int threads_num = 3;
-    std::vector<std::thread> threads;
-    for (int i = 0; i < threads_num; i++) {
-        std::thread thread([this](int l) {
-            this->run_thread(l);
-        }, listener);
-        threads.push_back(std::move(thread));
-    }
 
-    for (auto &thr: threads) {
-        if (thr.joinable()) {
-            thr.join();
-        }
-    }
-}
+void Worker::run(int listener, int epollfd) {
+    this->epoll_fd = epollfd;
 
-void Worker::run_thread(int listener) {
-    HttpParser parser;
+    sockaddr_in client_addr{};
+    socklen_t client_addr_len = sizeof(client_addr);
 
-    while(true) {
-        auto sock = accept(listener, nullptr, nullptr);
-        if(sock < 0) {
-            perror("accept");
-            exit(3);
+    while (true) {
+        auto nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+        if (nfds < 0) {
+            perror("epoll_wait");
+            continue;
         }
 
-        auto req = read_request(sock);
+        for (auto i = 0; i < nfds; i++) {
+            if (events[i].data.fd == listener) {
+                accept_request(listener, client_addr, client_addr_len);
+            } else {
+                auto request = static_cast<HttpRequest *>(events[i].data.ptr);
+                process_request(request);
 
-        try {
-            auto http_req = parser.parse_header(req);
-            complete_tusk(http_req, sock);
-        } catch (std::exception &e) {
-            std::cout << e.what() << std::endl;
-        }
-
-        close(sock);
-    }
-}
-
-void Worker::write_start_line(std::string &version, int status, int sock) {
-    auto start_str = version + " " + std::to_string(status) + " " + statuses.at(status) + "\r\n";
-    send(sock, start_str.c_str(), start_str.length(), 0);
-}
-
-std::string Worker::read_request(int sock) {
-    const int buf_size = 1024;
-    char buf[buf_size]; // TODO move to some config
-    std::string req;
-
-    auto n = recv(sock, buf, buf_size, 0);
-    if (n > 0) {
-        req.append(buf, n);
-    } else {
-        if (n == -1) {
-            throw Exception("read failed");
-        }
-    }
-
-    return req;
-}
-
-void Worker::complete_tusk(HttpRequest &request, int socket) {
-    int status;
-    auto method = request.start_line.method;
-    std::cout << "url: " << request.start_line.uri << std::endl
-        << "method: " << request.start_line.method << std::endl
-        << "http version: " << request.start_line.http_version << std::endl;
-
-    if (method == "GET" || method == "HEAD") {
-        status = 200;
-
-        bool is_subdir;
-        try {
-            is_subdir = make_path(request.start_line.uri);
-            if (!fs::exists(request.start_line.uri)) {
-                if (is_subdir) {
-                    status = 403;
-                } else {
-                    status = 404;
+                auto state = request->get_state();
+                switch (state) {
+                    case reading:
+                        event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+                        event.data.ptr = request;
+                        if (epoll_ctl(epollfd, EPOLL_CTL_MOD, request->get_conn_fd(), &event) < 0) {
+                            perror("epoll_ctl");
+                            continue;
+                        }
+                        break;
+                    case writing:
+                        event.events = EPOLLOUT | EPOLLET | EPOLLONESHOT;
+                        event.data.ptr = request;
+                        if (epoll_ctl(epollfd, EPOLL_CTL_MOD, request->get_conn_fd(), &event) < 0) {
+                            perror("epoll_ctl");
+                            continue;
+                        }
+                        break;
+                    case done:
+                        if (epoll_ctl(epollfd, EPOLL_CTL_DEL, request->get_conn_fd(), &event) < 0) {
+                            perror("epoll_ctl");
+                            continue;
+                        }
+                        delete request;
+                    case read_done:
+                        break;
                 }
             }
-        } catch (Exception &e) {
-            status = 403;
-            std::cout << "exc" << std::endl;
         }
-        // TODO check if its directory
-        write_start_line(request.start_line.http_version, status, socket);
+    }
+}
 
+Worker::Worker(std::string &docs_root)
+    : _docs_root(docs_root) {
+    events = new epoll_event[MAX_EVENTS];
+}
 
-        int size = 0;
-        if (status == 200) {
-            size = fs::file_size(request.start_line.uri);
-        }
-
-        std::cout << "status: " << status << "; size: " << size << std::endl;
-        if (status == 200) {
-            write_headers(socket, true, request.start_line.uri, size);
-            if (method == "GET") {
-                write_file(socket, request.start_line.uri);
+void Worker::accept_request(int listen_fd, sockaddr_in &client_addr, socklen_t &client_len) {
+    while (true) {
+        int conn_fd = accept(listen_fd, (sockaddr *) &client_addr, &client_len);
+        if (conn_fd < 0) {
+            if (errno == EAGAIN | errno == EWOULDBLOCK) {
+                break;
+            } else {
+                perror("accept");
+                break;
             }
-        } else {
-            write_headers(socket, false, request.start_line.uri);
         }
-    } else {
-        status = 405;
-        write_start_line(request.start_line.http_version, status, socket);
-        write_headers(socket, false, request.start_line.uri);
-    }
-}
 
-void Worker::write_headers(int sock, bool is_ok, std::string &uri, int length) {
-    std::string headers = "Server: Kotyarich Server C++\r\n"
-                          "Connection: close\r\n"
-                          "Date: " + get_rfc7231_time() + "\r\n";
+        set_non_blocking(conn_fd);
 
-    if (is_ok) {
-        std::string content_type;
-        try {
-            auto ext = get_extension(uri);
-            content_type = contnet_types.at(ext);
-        } catch (std::exception &e) {
-            content_type = "text/plain";
+        event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+        auto request = new HttpRequest(conn_fd);
+        event.data.ptr = request;
+
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_fd, &event) < 0) {
+            perror("epoll_ctl");
+            continue;
         }
-        headers += "Content-Type: " + content_type + "\r\n"
-            + "Content-Length: " + std::to_string(length) + "\r\n\r\n";
     }
-
-    std::cout << headers;
-    send(sock, headers.c_str(), headers.length(), 0);
 }
 
-bool Worker::make_path(std::string &path) {
-    if (path.find("/..") != std::string::npos) {
-        throw Exception("bad path .."); // TODO add custom exception
-    }
-
-    auto arguments_pos = path.find('?');
-    if (arguments_pos != std::string::npos) {
-        path = path.substr(0, arguments_pos);
-    }
-    HttpParser parser;
-    auto decoded_path = parser.decode_uri(path);
-
-    auto subdir = false;
-    if (decoded_path[decoded_path.length() - 1] != '/') {
-        path = _docs_root + decoded_path;
-    } else {
-        subdir = true;
-        path = _docs_root + decoded_path + "index.html";
-    }
-    std::cout << "path: " << path << std::endl;
-
-    return subdir;
+Worker::~Worker() {
+    delete[] events;
 }
 
-void Worker::write_file(int sock, std::string &uri) {
-    auto size = fs::file_size(uri);
-    auto fd = open(uri.c_str(), O_RDONLY);
-    // TODO add check if file opened
-
-    while (size != 0) {
-        auto written = sendfile(sock, fd, nullptr, size);
-        if (written != -1) {
-            size -= written;
-        } else {
-            if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                // TODO add something useful here mb
+void Worker::process_request(HttpRequest *request) {
+//    request->log();
+    std::cout << request << std::endl;
+    switch (request->get_state()) {
+        case reading:
+            request->read_data();
+            if (request->get_state() == read_done) {
+                request->parse();
+                request->handle(_docs_root);
             }
-            close(fd);
-            return;
-        }
+            break;
+        case writing:
+            request->write_file();
+            break;
+        case read_done:
+            break;
+        case done:
+            break;
     }
-
-    close(fd);
 }
-
-Worker::Worker(std::string &docs_root): _docs_root(docs_root) {}

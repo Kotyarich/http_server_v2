@@ -1,10 +1,6 @@
 #ifndef SERVER_WORKER_H
 #define SERVER_WORKER_H
 
-#include <thread>
-#include <mutex>
-#include <queue>
-
 #include <string>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -12,26 +8,23 @@
 #include <unordered_map>
 #include "Exception.h"
 #include "HttpParser.h"
-#include "HttpUtils.h"
-
-namespace fs = std::experimental::filesystem;
+#include "NetUtils.h"
 
 class Worker {
 public:
     explicit Worker(std::string &docs_root);
-    void run(int listener);
+    void run(int listener, int epollfd);
+
+    ~Worker();
 private:
+    static const size_t MAX_EVENTS = 128;
     std::string _docs_root;
-    std::mutex _mut;
+    epoll_event event;
+    epoll_event *events;
+    int epoll_fd;
 
-    void write_start_line(std::string &version, int status, int sock);
-    void write_headers(int sock, bool is_ok, std::string &uri, int length=0);
-    void write_file(int sock, std::string &uri);
-    void complete_tusk(HttpRequest &request, int sock);
-    bool make_path(std::string &path);
-    void run_thread(int listener);
-
-    std::string read_request(int sock);
+    void accept_request(int listen_fd, sockaddr_in &client_addr, socklen_t &client_len);
+    void process_request(HttpRequest *request);
 };
 
 

@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <experimental/filesystem>
 #include <string>
+#include <fcntl.h>
 #include <ctime>
 
 const std::unordered_map<int, std::string> statuses {
@@ -13,7 +14,7 @@ const std::unordered_map<int, std::string> statuses {
     std::pair<int, std::string>{405, "Method Not Allowed"},
 };
 
-const std::unordered_map<std::string, std::string> contnet_types {
+const std::unordered_map<std::string, std::string> content_types {
     std::pair<std::string, std::string>{".html", "text/html"},
     std::pair<std::string, std::string>{".css", "text/css"},
     std::pair<std::string, std::string>{".js", "application/javascript"},
@@ -26,5 +27,8 @@ const std::unordered_map<std::string, std::string> contnet_types {
 
 std::string get_rfc7231_time();
 std::string get_extension(std::string &p);
+void set_non_blocking(int fd);
+size_t rio_writen(int fd, const char *user_buf, size_t n);
+
 
 #endif //SERVER_HTTPUTILS_H

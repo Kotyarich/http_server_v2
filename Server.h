@@ -1,6 +1,9 @@
 #ifndef SERVER_SERVER_H
 #define SERVER_SERVER_H
 
+#include <fcntl.h>
+#include <sys/epoll.h>
+#include <thread>
 #include "Exception.h"
 #include "Worker.h"
 
@@ -11,7 +14,7 @@ public:
     void read_config(std::string path);
 private:
     std::string _documents_root;
-    int _workers_number = 3;
+    size_t _workers_number = 3;
     int _port;
 };
 
