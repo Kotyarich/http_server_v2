@@ -9,6 +9,7 @@
 #include <experimental/filesystem>
 #include <string>
 #include <unordered_map>
+#include <netinet/in.h>
 
 namespace fs = std::experimental::filesystem;
 using Headers = std::unordered_map<std::string, std::string>;
@@ -29,15 +30,18 @@ enum RequestState {
 struct HttpRequest {
     void write_file();
 public:
-    explicit HttpRequest(int conn_fd) {
+    HttpRequest(int conn_fd, sockaddr_in client_addr) {
         this->conn_fd = conn_fd;
         left = 0;
         state = reading;
         file_fd = -1;
+        addr = client_addr;
     }
 
     RequestState get_state() const;
     int get_conn_fd() const;
+    std::string get_ext() const;
+    sockaddr_in get_addr() const;
 
     void read_data();
     void parse();
@@ -60,6 +64,8 @@ private:
     size_t left;
     int file_fd;
     RequestState state;
+    std::string extension;
+    sockaddr_in addr;
 
     inline void to_lower_case(std::string &str);
     bool make_path(const std::string &root);

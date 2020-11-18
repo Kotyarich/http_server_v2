@@ -47,12 +47,12 @@ void Server::start() {
     std::vector<std::thread> work_threads(_workers_number);
     for (int i = 0; i < _workers_number; i++) {
         work_threads[i] = std::thread([&]() {
-            auto worker = std::make_unique<Worker>(_documents_root);
+            auto worker = std::make_unique<Worker>(_documents_root, user_repository);
             worker->run(listener, epollfd);
         });
     }
 
-    auto worker = std::make_unique<Worker>(_documents_root);
+    auto worker = std::make_unique<Worker>(_documents_root, user_repository);
     worker->run(listener, epollfd);
 
     for (auto &thr: work_threads) {
@@ -87,4 +87,8 @@ void Server::read_config(std::string path) {
     }
 
     f.close();
+}
+
+Server::Server() {
+    user_repository.reset(new PostgresExtensionRepository);
 }

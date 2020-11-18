@@ -1,6 +1,6 @@
 #include <sys/sendfile.h>
 #include <sys/socket.h>
-#include "HttpParser.h"
+#include "HttpRequest.h"
 #include "Exception.h"
 #include "NetUtils.h"
 
@@ -153,8 +153,8 @@ void HttpRequest::write_headers(bool is_ok) {
     if (is_ok) {
         std::string content_type;
         try {
-            auto ext = get_extension(start_line.uri);
-            content_type = content_types.at(ext);
+            extension = get_extension(start_line.uri);
+            content_type = content_types.at(extension);
         }
         catch (std::exception &e) {
             content_type = "text/plain";
@@ -228,4 +228,12 @@ HttpRequest::~HttpRequest() {
         close(file_fd);
     }
     shutdown(conn_fd, SHUT_RDWR);
+}
+
+std::string HttpRequest::get_ext() const {
+    return extension;
+}
+
+sockaddr_in HttpRequest::get_addr() const {
+    return addr;
 }
